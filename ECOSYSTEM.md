@@ -74,6 +74,7 @@
 | 队列深度上限 | DSH GUI 设置→任务编排（0-50，活读） | **免重启** |
 | 桥默认工作区 | profile patch `task-bridge-runtime.config.defaultCwd` | 重启后 |
 | 故障排查 | playbook §D 故障速查表（401/refused/429/空 recent/截断/没信） | — |
+| Codex thread 切换 | 信件 to= 地址由 L1 自填（禁第三方硬编码）；**heartbeat 绑 thread，换会话须重建**（playbook §E5 守卫记录） | 即时 |
 
 ## 7. 双层总控工作流（L1 视角模板）
 
