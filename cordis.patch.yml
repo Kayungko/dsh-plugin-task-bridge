@@ -1,0 +1,31 @@
+# dsh-plugin-task-bridge 的装载声明：向宿主组合层插入本桥插件。
+#
+# 挂载形态照 dsh-plugin-task-coordinator 先例——独立插件组（group: true），
+# 使桥内任何故障都被组边界隔离，不拖垮宿主。
+#
+# isolate 共享 label（关键）：本组声明与 task-coordinator 组**完全相同的字符串
+# label** 'dsh-task-bridge'。cordis 加载器的 isolate 机制
+# （@deepseek-ai/cordis-plugin-loader/src/config/isolate.ts）：
+#   isolate: { <service>: '<label>' }（字符串）→ GlobalRealm，Symbol 后缀
+#   '@<label>'，**同 label 的 entries 共享同一 Symbol**。
+# 因此 coordinator 在 Symbol('taskCoordinator@dsh-task-bridge') 下 provide 的
+# ops 实例，本桥用 ctx.get('taskCoordinator') 即可解析（root Symbol 下的其他
+# 宿主插件仍查不到——暴露面只扩大到声明同 label 的插件组，符合最小暴露）。
+# 详见 task-coordinator docs/PROTOCOL.md §17.3 与 research/task-bridge-reanchoring.md §1.3。
+#
+# 桥的 index.mjs 另以 `export const inject = ['webServer']` 硬注入宿主 webserver
+# （路由注册面）；对 taskCoordinator 服务则用惰性 ctx.get（不硬 inject），以便
+# coordinator 缺席/禁用时桥仍挂载路由并回 503 降级（PROTOCOL.md §17.2 约定 3）。
+#
+# profile 层可按 id `task-bridge-runtime` 覆盖 config（整行替换，需重述 name），
+# 可配置项：tokenFile / defaultCwd / maxBodyBytes / spawnWindowMs / spawnMaxPerWindow
+# （默认值见 README「配置」节；全部可选，缺省即用内置默认）。
+- insert:
+    - id: task-bridge
+      name: '@deepseek-ai/cordis-plugin-group'
+      group: true
+      isolate:
+        taskCoordinator: 'dsh-task-bridge'
+      config:
+        - id: task-bridge-runtime
+          name: 'dsh-plugin-task-bridge'

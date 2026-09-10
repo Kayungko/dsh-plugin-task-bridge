@@ -1,0 +1,12 @@
+# Dependencies（本插件零 npm 依赖；junction 仿真目录不入库）
+node_modules/
+
+# install.ps1 运行产生的时间戳备份
+backups/
+
+# Logs
+*.log
+
+# OS junk
+Thumbs.db
+.DS_Store

@@ -1,0 +1,63 @@
+{
+  "name": "dsh-plugin-task-bridge",
+  "version": "0.1.0",
+  "description": "Loopback HTTP control-plane bridge for DeepSeek Harness: lets an external local supervisor process (e.g. a Codex CLI/MCP driver) spawn, message, inspect and wait on DSH task sessions through six token-guarded exact routes registered on the host webserver. Consumes the dsh-plugin-task-coordinator 0.24.0 service seam (ctx.get('taskCoordinator').ops) read-only under a shared isolate label; degrades to 503 when the coordinator is absent or disabled. Defense skeleton follows the official dsh-webhook-github adapter (constant-time token compare, single-value header check, Content-Length precheck plus streaming body cap, method whitelist, non-echoing static errors, 503 fallback).",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./auth": "./auth.mjs",
+    "./endpoints": "./endpoints.mjs",
+    "./policy": "./policy.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "auth.mjs",
+    "endpoints.mjs",
+    "policy.mjs",
+    "cordis.patch.yml",
+    "install.ps1",
+    "smoke.mjs",
+    "verify-installed.mjs",
+    "README.md",
+    "CHANGELOG.md",
+    ".gitignore"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "check": "node --check index.mjs && node --check auth.mjs && node --check endpoints.mjs && node --check policy.mjs && node --check smoke.mjs && node --check verify-installed.mjs",
+    "smoke": "node smoke.mjs",
+    "verify": "node verify-installed.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-host-webserver": ">=0.1.2-rc.1",
+    "dsh-plugin-task-coordinator": ">=0.24.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-host-webserver": {
+      "optional": false
+    },
+    "dsh-plugin-task-coordinator": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "task-bridge",
+    "codex",
+    "http-bridge",
+    "control-plane",
+    "loopback"
+  ],
+  "license": "MIT",
+  "private": true
+}
