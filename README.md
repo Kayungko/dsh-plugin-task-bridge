@@ -8,6 +8,8 @@
 
 设计基线与取证见 `research/task-bridge-reanchoring.md`（本仓库上级 `D:\git\DHS-Tool\research`）；服务缝消费契约见 `dsh-plugin-task-coordinator` 的 `docs/PROTOCOL.md §17`。
 
+**生态级入口（五组件全景/安装顺序/五条通道/运维手册/双层总控模板）：[ECOSYSTEM.md](./ECOSYSTEM.md)** —— 本 README 只覆盖桥插件自身。
+
 ---
 
 ## 目录
