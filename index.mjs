@@ -1,10 +1,12 @@
 /**
- * dsh-plugin-task-bridge — 入口（v0.1.0 MVP）。
+ * dsh-plugin-task-bridge — 入口（v0.2.0）。
  *
  * 本地回环 HTTP 控制面桥：外部本机进程（如 Codex 总控 / 其 MCP stdio wrapper）
  * 经宿主 webserver 的 exact 路由驱动 DSH 任务。六个端点（/v1/spawn、/v1/send、
  * /v1/progress、/v1/wait、/v1/list、/v1/models）包装 dsh-plugin-task-coordinator
- * 0.24.0 服务缝 provide 的同一 ops 实例。
+ * 0.24.0 服务缝 provide 的同一 ops 实例。v0.2.0：/v1/spawn 增可选 externalRef
+ * （wire 契约 C1，见 endpoints.mjs）——外部派发方的会话对应标识，需 coordinator
+ * 0.25.0+ 存储透出。
  *
  * 服务缝消费方式（research/task-bridge-reanchoring.md §1 + coordinator PROTOCOL §17）：
  *  - coordinator 以 provide('taskCoordinator', { config, version, ops }) 暴露 ops；

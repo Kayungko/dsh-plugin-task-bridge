@@ -235,6 +235,24 @@ function optionalString(value, name) {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+/** externalRef 上限（wire 契约 C1，v0.2.0）：trim 后 ≤200 字符。 */
+export const EXTERNAL_REF_MAX_CHARS = 200;
+
+/**
+ * 解析 /v1/spawn 的可选 externalRef（wire 契约 C1，dshq-ledger-mailbox-spec
+ * Part C，两端锁死）：string、可选、trim 后 ≤200 字符；空串/仅空白视为缺席；
+ * 非字符串或超长 → bad-request。null/undefined 与其他可选字段同规视为缺席
+ * （optionalString 既定惯例）。语义=自由文本（建议 `<thread短id>:<波次名>`），
+ * 桥只校验透传，不解析。
+ */
+function optionalExternalRef(value) {
+  const trimmed = optionalString(value, 'externalRef'); // 非字符串（null/undefined 除外）→ bad-request
+  if (trimmed !== undefined && trimmed.length > EXTERNAL_REF_MAX_CHARS) {
+    throw new HttpRefusal(400, ENVELOPE_CODES.BAD_REQUEST, `field externalRef must be at most ${EXTERNAL_REF_MAX_CHARS} characters after trim`);
+  }
+  return trimmed;
+}
+
 function parseJsonBody(bodyText) {
   let parsed;
   try {
@@ -278,6 +296,8 @@ async function parseEndpointInput(endpoint, request, config) {
         provider: optionalString(body.provider, 'provider'),
         model: optionalString(body.model, 'model'),
         reasoningEffort: optionalString(body.reasoningEffort, 'reasoningEffort'),
+        // externalRef（v0.2.0，wire 契约 C1）：外部派发方的自由文本对应标识
+        externalRef: optionalExternalRef(body.externalRef),
       };
     }
     if (endpoint.kind === 'send') {
@@ -436,6 +456,10 @@ async function executeEndpoint(endpoint, deps, input, response) {
         ...(input.provider !== undefined ? { provider: input.provider } : {}),
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
+        // externalRef（v0.2.0，wire 契约 C1）：透传 ops.spawnTask（0.25.0 起接受
+        // 并持久化/回显；coordinator 0.24.x 会静默忽略——peerDependencies 已抬到
+        // >=0.25.0）。成功回执经 callOps 原样透传，externalRef 随之回显。
+        ...(input.externalRef !== undefined ? { externalRef: input.externalRef } : {}),
         reportBack: false, // 固定契约⑥：结构性强制——伪 caller 非真实会话，回报后缀会指向不存在的目标
       };
       return callOps(deps, 'spawnTask', [opsArgs, caller]);

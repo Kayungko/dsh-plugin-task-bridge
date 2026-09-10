@@ -14,7 +14,8 @@
  *   ④ 鉴权矩阵端到端（真实临时 token 文件 + 合成 token）：缺头/错值 401、重复头 400、
  *      正确 200、token 文件缺失 503
  *   ⑤ spawn 端到端：走到 mock ops 且参数含 reportBack:false + 伪 caller 形状；
- *      回执 workspace/placement/correlationId 透传
+ *      回执 workspace/placement/correlationId 透传；externalRef（v0.2.0，wire
+ *      契约 C1）trim 后透传 ops 且回执回显
  *   ⑥ wait 钳制：timeoutMs 超大 → ops 收到 ≤50000
  *   ⑦ 降级：服务缺席 / 服务无 ops → 503 upstream-error
  *
@@ -47,7 +48,7 @@ console.log('  [OK] ① 入口 exports 形状（零 @deepseek-ai import，本位
 {
   const pkg = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8'));
   assert.equal(pkg.name, 'dsh-plugin-task-bridge');
-  assert.equal(pkg.version, '0.1.0');
+  assert.equal(pkg.version, '0.2.0');
   assert.equal(pkg.dsh?.bundle?.patch, './cordis.patch.yml', 'dsh.bundle.patch 应指向 cordis.patch.yml');
   assert.equal(pkg.type, 'module');
   const yml = readFileSync(join(here, 'cordis.patch.yml'), 'utf8');
@@ -94,7 +95,7 @@ async function hit(handler, req, res = makeRes()) {
 function makeMockOps() {
   const calls = { spawnTask: [], waitFor: [], models: [] };
   const ops = {
-    async spawnTask(args, caller) { calls.spawnTask.push({ args, caller }); return { ok: true, sessionId: 'session-verify-child', shortId: 'verify-chi', title: '0910｜探索｜自检', cwd: 'D:/git/DHS-Tool', workspace: { id: 'ws-verify', title: 'DHS-Tool' }, placement: 'exact-match', started: true, correlationId: 'task-coord-verify-1', depth: 1, hint: '…' }; },
+    async spawnTask(args, caller) { calls.spawnTask.push({ args, caller }); return { ok: true, sessionId: 'session-verify-child', shortId: 'verify-chi', title: '0910｜探索｜自检', cwd: 'D:/git/DHS-Tool', workspace: { id: 'ws-verify', title: 'DHS-Tool' }, placement: 'exact-match', started: true, correlationId: 'task-coord-verify-1', depth: 1, ...(args.externalRef !== undefined ? { externalRef: args.externalRef } : {}), hint: '…' }; },
     async waitFor(args, caller) { calls.waitFor.push({ args, caller }); return { ok: true, mode: args.mode, settled: false, reason: 'timed out', waitedMs: args.timeoutMs, count: args.sessionIds.length, targets: [] }; },
     async models(args, caller) { calls.models.push({ args, caller }); return { ok: true, providers: [{ id: 'verify-provider', models: [{ id: 'verify-model' }] }], hint: '…' }; },
   };
@@ -167,12 +168,13 @@ try {
     {
       const spawnHandler = m.handler('/v1/spawn');
       const H = { ...authHeaders(TOKEN), 'content-type': 'application/json' };
-      const r = await hit(spawnHandler, makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: '自检子任务', cwd: 'D:/git/DHS-Tool', reportBack: true }) }));
+      const r = await hit(spawnHandler, makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: '自检子任务', cwd: 'D:/git/DHS-Tool', reportBack: true, externalRef: '  thread-synth:wave-verify  ' }) }));
       assert.equal(r.status, 200); assert.equal(r.body.ok, true);
       assert.equal(mock.calls.spawnTask.length, 1, 'spawn 应走到 mock ops');
       const { args, caller } = mock.calls.spawnTask[0];
       assert.equal(args.reportBack, false, 'spawn 必须强制 reportBack:false（即使请求带 true）');
       assert.equal(args.prompt, '自检子任务');
+      assert.equal(args.externalRef, 'thread-synth:wave-verify', 'externalRef 应 trim 后透传 ops（v0.2.0，wire 契约 C1）');
       assert.equal(caller.sessionId, BRIDGE_CALLER_SESSION_ID, '伪 caller sessionId');
       assert.equal(caller.origin, undefined, '伪 caller origin 应 undefined（非 subagent）');
       assert.equal(caller.cwd, 'D:/git/DHS-Tool', 'caller.cwd 应取请求 cwd');
@@ -180,7 +182,12 @@ try {
       assert.equal(r.body.workspace.id, 'ws-verify', 'workspace 应透传');
       assert.equal(r.body.placement, 'exact-match', 'placement 应透传');
       assert.equal(r.body.correlationId, 'task-coord-verify-1');
-      console.log('  [OK] ⑤ spawn 端到端（reportBack:false 强制 + 伪 caller 形状 + workspace/placement 回执透传）');
+      assert.equal(r.body.externalRef, 'thread-synth:wave-verify', 'externalRef 应随回执回显');
+      // externalRef 违规（超长）→ 400 bad-request 且 ops 未再被调（C1 契约）
+      const rBad = await hit(spawnHandler, makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: 'x', externalRef: 'y'.repeat(201) }) }));
+      assert.equal(rBad.status, 400); assert.equal(rBad.body.code, 'bad-request');
+      assert.equal(mock.calls.spawnTask.length, 1, '被拒的 externalRef 不得到达 ops');
+      console.log('  [OK] ⑤ spawn 端到端（reportBack:false 强制 + 伪 caller 形状 + workspace/placement 回执透传 + externalRef trim 透传/回显/超长拒绝）');
     }
 
     // ---- ⑥ wait 钳制 ----

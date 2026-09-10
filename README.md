@@ -2,7 +2,7 @@
 
 > 本地回环 HTTP 控制面桥 —— 让外部本机进程（如 Codex 总控 / 其 MCP stdio wrapper）驱动 DeepSeek Harness（DSH）的任务会话。
 >
-> 版本 **0.1.0（MVP）** · 许可 MIT · 宿主 DSH Desktop（cordis 插件架构）
+> 版本 **0.2.0** · 许可 MIT · 宿主 DSH Desktop（cordis 插件架构）
 
 外部驱动方没有 DSH 的进程内 agent 上下文，无法直接调用 `task_*` 工具。本桥在宿主 webserver 上注册 6 条 **exact 路由**，把 HTTP 请求翻译成对 `dsh-plugin-task-coordinator` **服务缝**（`taskCoordinator` 服务的 `ops` 实例）的调用，从而以「拉非推」（long-poll `wait` + 轮询 `progress`）模型驱动 DSH 任务。
 
@@ -58,7 +58,7 @@
 | 依赖 | 要求 | 缺失时行为 |
 |---|---|---|
 | `@deepseek-ai/dsh-host-webserver` | 提供 `webServer` 服务（`register`/`host`） | `apply()` 抛错，桥不挂载（硬依赖） |
-| `dsh-plugin-task-coordinator` **0.24.0+** | 服务缝：`provide('taskCoordinator', { config, version, ops })`，且其插件组 isolate 改为共享 label `'dsh-task-bridge'` | 桥仍挂载路由，但所有端点回 **503 upstream-error**（惰性 `ctx.get` 返回 undefined 或载荷无 ops） |
+| `dsh-plugin-task-coordinator` **0.25.0+**（服务缝自 0.24.0） | 服务缝：`provide('taskCoordinator', { config, version, ops })`，且其插件组 isolate 改为共享 label `'dsh-task-bridge'`；**externalRef 全链（registry 持久化/回执/list/progress 透出）需 0.25.0+**——0.24.x 下该字段被 ops 静默忽略（不报错、不落盘） | 桥仍挂载路由，但所有端点回 **503 upstream-error**（惰性 `ctx.get` 返回 undefined 或载荷无 ops） |
 
 > **isolate 共享 label 是双向的**：coordinator 组与本桥组都必须在各自 `cordis.patch.yml` 声明 `isolate: { taskCoordinator: 'dsh-task-bridge' }`，cordis 加载器才会让两者共享同一 GlobalRealm Symbol（`taskCoordinator@dsh-task-bridge`）。coordinator 0.24.0 已落地此改动；本桥 `cordis.patch.yml` 声明同一 label。
 
@@ -153,12 +153,14 @@ Base URL：`http://127.0.0.1:43120`（宿主 webserver 同端口）。所有端�
 
 | 端点 | 方法 | 请求 | 成功应答（`ok:true` + 透传字段） | 主要失败 |
 |---|---|---|---|---|
-| `/v1/spawn` | POST | body：`{ prompt!, title?, cwd?, team?, sessionId?, provider?, model?, reasoningEffort? }`（客户端的 `reportBack` 一律忽略，桥强制 `false`） | `sessionId, shortId, title?, team?, cwd, workspace({id,title}\|null), placement, normalizedFrom?, note?, warning?, model?, modelSource?, started, correlationId, depth, hint` | `policy-gated` 429 / `bad-request` 400 / `upstream-error` 502（含孤儿 `sessionId`） |
+| `/v1/spawn` | POST | body：`{ prompt!, title?, cwd?, team?, sessionId?, provider?, model?, reasoningEffort?, externalRef? }`（客户端的 `reportBack` 一律忽略，桥强制 `false`；`externalRef` 见下方契约注） | `sessionId, shortId, title?, team?, externalRef?, cwd, workspace({id,title}\|null), placement, normalizedFrom?, note?, warning?, model?, modelSource?, started, correlationId, depth, hint` | `policy-gated` 429 / `bad-request` 400 / `upstream-error` 502（含孤儿 `sessionId`） |
 | `/v1/send` | POST | body：`{ sessionId!, text!, mode?='queue'\|'steer', reference? }` | `delivered, targetId, mode, messageId?, reference?, placement, targetStatus, queueDepth{nextTurn,nextStep}, hint, note?` | `rate-limited`/`queue-full` 429 / `not-found` 404 / `bad-request` 400 |
-| `/v1/progress` | GET | query：`sessionId!` | `sessionId, shortId, team?, title, cwd, updatedAt, todos, goal, agentState('idle'\|'running'\|'cold-idle'), queue[], recent[], seq?, note?, inspectError?` | `not-found` 404 / `bad-request` 400 |
+| `/v1/progress` | GET | query：`sessionId!` | `sessionId, shortId, team?, externalRef?, title, cwd, updatedAt, todos, goal, agentState('idle'\|'running'\|'cold-idle'), queue[], recent[], seq?, note?, inspectError?` | `not-found` 404 / `bad-request` 400 |
 | `/v1/wait` | GET | query：`sessionId`（可重复）或 `sessionIds`（逗号分隔），`timeoutMs?`（钳 ≤50000，缺省 45000），`mode?='all'\|'any'` | `mode, settled(bool), reason, waitedMs, count, targets[{sessionId,idle,agentState}], sessionId?, hint?` —— **超时也是 200**（`settled:false`） | `bad-request` 400 / `upstream-error` 500 |
-| `/v1/list` | GET | query：`filter?, team?, limit?(1..500,缺省50), includeSubagents?(bool), ungrouped?(bool)` | `count, truncated, callerSessionId, team?, ungrouped?, tasks[], hint` | `bad-request` 400 |
+| `/v1/list` | GET | query：`filter?, team?, limit?(1..500,缺省50), includeSubagents?(bool), ungrouped?(bool)` | `count, truncated, callerSessionId, team?, ungrouped?, tasks[]`（行含 `team?`/`externalRef?` registry 富化）`, hint` | `bad-request` 400 |
 | `/v1/models` | GET | —— | `default?, pluginDefault?, providers[{id,name?,models[{id,name?,efforts[],defaultEffort?}]}], failedProviders?, hint` | `upstream-error` 503 |
+
+> **externalRef（v0.2.0，wire 契约 C1——`research/dshq-ledger-mailbox-spec.md` Part C，两端锁死不得单方更改）**：外部派发方的自由文本对应标识（建议格式 `<thread短id>:<波次名>`，如 `01a08955:sgame-m3`）。string、可选、trim 后 ≤200 字符；空串/仅空白视为缺席；非字符串或超长 → `bad-request`（桥侧校验先于 ops，违规请求不消耗配额外的 ops 调用）。DSH 侧**只存储回显、不解析**：coordinator（0.25.0+）registry 持久化、spawn 回执回显（trim 形态）、`/v1/list` 行与 `/v1/progress` 均透出——供外部驱动方反查「这个 DSH 会话是我的哪个对话/波次派的」。coordinator 0.24.x 会静默忽略该字段（peerDependencies 已抬至 >=0.25.0）。
 
 > **cancel / confirm / spawn_batch / transcript 不在 MVP**：蓝图 §0.2 将 `/v1/cancel` 列为第二批（⏸，可用 `/v1/send` 发停止指令降级替代），`/v1/confirm`+`/v1/spawn_batch` 列为二期（依赖 agent-less 弹卡端到端验证），`/v1/transcript` 已砍（OpenViking 记忆面承担叙事交接）。
 
@@ -168,10 +170,11 @@ Base URL：`http://127.0.0.1:43120`（宿主 webserver 同端口）。所有端�
 TOKEN=$(cat ~/.dsh/task-bridge-token)   # 仅示意；Windows 用 type %USERPROFILE%\.dsh\task-bridge-token
 BASE=http://127.0.0.1:43120
 
-# spawn（reportBack 被桥强制 false，反馈走 wait+progress 拉取）
+# spawn（reportBack 被桥强制 false，反馈走 wait+progress 拉取；externalRef 可选，
+# 带上派发方的会话/波次标识以便日后反查对应，见端点契约注）
 curl -s -X POST "$BASE/v1/spawn" \
   -H "X-Task-Bridge-Token: $TOKEN" -H 'content-type: application/json' \
-  -d '{"prompt":"实现 X 功能","cwd":"D:/git/proj","team":"feat-x"}'
+  -d '{"prompt":"实现 X 功能","cwd":"D:/git/proj","team":"feat-x","externalRef":"<thread短id>:feat-x"}'
 
 # wait 长轮询（单次 ≤50s；settled:false 则续 call 形成心跳）
 curl -s --max-time 55 "$BASE/v1/wait?sessionId=session-xxx&timeoutMs=45000" \
@@ -233,7 +236,7 @@ ops 码 → 桥码的完整映射见 `endpoints.mjs` 的 `OPS_CODE_MAP`。未列
 
 本桥是「拉非推」控制面：外部驱动方（Codex）没有入站通道，只能主动 call。推荐循环：
 
-1. **spawn** 派发任务 → 拿 `sessionId`（记下 `correlationId` 供 send 的 `reference` 引用）。
+1. **spawn** 派发任务 → 拿 `sessionId`（记下 `correlationId` 供 send 的 `reference` 引用）。建议带 `externalRef: '<thread短id>:<波次名>'`（v0.2.0，契约 C1）——DSH 侧 registry/回执/list/progress 全链存储回显，换会话后可经 `/v1/list` 反查「哪些任务是本轮对话派的」。
 2. **wait** 长轮询（`timeoutMs ≤ 50000`）：
    - `settled:true` → 任务空闲，读 **progress** 看结果；
    - `settled:false`（超时，HTTP 200）→ **同一 turn 内续 call wait** 形成心跳（不要当成错误）。
@@ -257,8 +260,8 @@ node smoke.mjs            # 离线全规则（11 节 A-K，零网络/零宿主/�
 node verify-installed.mjs # 安装态自检（mock ctx；仓库/安装位置/junction 仿真均可跑）
 ```
 
-- **`smoke.mjs`**：mock ops + mock webserver 注册面，覆盖鉴权矩阵、回环拒绝、body 限长、策略闸、wait 钳制、reportBack:false 强制、伪 caller 形状、错误信封映射、wait 断连中止等全部规则。
-- **`verify-installed.mjs`**：mock ctx 安装态，断言路由表注册齐全、鉴权矩阵端到端、spawn 走到 mock ops 且参数含 `reportBack:false`、降级 503。
+- **`smoke.mjs`**：mock ops + mock webserver 注册面，覆盖鉴权矩阵、回环拒绝、body 限长、策略闸、wait 钳制、reportBack:false 强制、伪 caller 形状、错误信封映射、wait 断连中止、externalRef 四态（0.2.0，契约 C1：传/不传/超长/非字符串 + 200/201 trim 边界）等全部规则。
+- **`verify-installed.mjs`**：mock ctx 安装态，断言路由表注册齐全、鉴权矩阵端到端、spawn 走到 mock ops 且参数含 `reportBack:false`、externalRef trim 透传/回执回显/超长拒绝、降级 503。
 - **junction 仿真安装态**（开发期自证，先例 `dsh-plugin-web-search-mana`）：把插件文件拷入临时目录，在其中 `node_modules\@deepseek-ai` 建 junction 指向宿主 `app.asar.unpacked\node_modules\@deepseek-ai`，再于该目录运行 `verify-installed.mjs`——忠实复刻 profile node_modules 树的解析环境。本插件零 `@deepseek-ai` import，junction 为环境保真（非解析必需）。
 
 ---

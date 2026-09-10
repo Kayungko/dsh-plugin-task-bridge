@@ -2,6 +2,28 @@
 
 本文件记录 `dsh-plugin-task-bridge` 的版本变更。格式参照 Keep a Changelog，版本遵循语义化版本。
 
+## [0.2.0] - 2026-09-10
+
+externalRef 端到端会话对应（桥端）——与 `dsh-plugin-task-coordinator` v0.25.0 同波施工，设计权威 `research/dshq-ledger-mailbox-spec.md` Part C（wire 契约 C1 两端锁死）。解决「经桥派发的 DSH 会话无法反查是哪个外部对话/波次派的」（桥伪 caller 恒为 `task-bridge-external`）。
+
+### 新增
+
+- **`POST /v1/spawn` 接受可选 `externalRef`**（wire 契约 C1）：string、可选、trim 后 ≤200 字符；空串/仅空白视为缺席（`null`/`undefined` 与其他可选字段同规）；非字符串或超长 → `bad-request`（400，桥侧校验**先于 ops**——违规请求不触达 coordinator，也不消耗策略闸配额外的 ops 调用）。语义=自由文本（建议格式 `<thread短id>:<波次名>`），桥只校验透传、不解析。
+- **全链透出**：externalRef 经 ops.spawnTask（coordinator 0.25.0+）持久化进 spawn registry，spawn 成功回执回显（trim 形态，经 callOps 原样透传）；`GET /v1/list` 行与 `GET /v1/progress` 由 coordinator 侧 registry 合并路径自动透出（桥零改动——成功载荷本就原样透传）。
+
+### 变更
+
+- `peerDependencies` 的 coordinator 要求 `>=0.24.0` → **`>=0.25.0`**：0.24.x 的 ops.spawnTask 会**静默忽略** externalRef（不报错、不落盘），抬版本线避免「ref 已带上」的假对应信心；六端点其余行为对 0.24.x 无破坏（copy-based 部署不跑 npm 解析，peer 线是文档性防线）。
+- README：版本头、前置依赖表（coordinator 0.25.0+ 与静默忽略警示）、端点对照表（spawn 请求/回执、list/progress 透出）、externalRef 契约注、curl 示例、消费指南第 1 步、测试节。
+
+### 测试
+
+- `smoke.mjs` G 节增 externalRef 四态块：传（trim 透传 ops + 回执回显 + 恰好 200 放行）、不传（缺席/null/空串/仅空白 → ops 参数不含键）、超长（trim 后 201 → 400 bad-request 且 ops 未调；trim 前 201/trim 后 200 → 放行）、非字符串（数字/布尔/对象/数组 → 400）。`verify-installed.mjs`：版本断言 0.2.0；⑤ spawn e2e 增 externalRef trim 透传/回执回显/超长拒绝零触达。junction 仿真安装态 ALL PASSED。
+
+### 未验证项
+
+- 真机写端点（活体 `dshq spawn --ref probe:c1` → list/progress 命中 → DSH registry 落盘核对）：桥运行中实例仍是 v0.1.0，**本波次不部署不打真机**（红线），部署与活体验证归总控。
+
 ## [0.1.0] - 2026-09-10
 
 首个 MVP：本地回环 HTTP 控制面桥，让外部本机进程（Codex 总控 / 其 MCP wrapper）经宿主 webserver 的 exact 路由驱动 DSH 任务。设计基线 `research/task-bridge-reanchoring.md`；消费 `dsh-plugin-task-coordinator` 0.24.0 服务缝。

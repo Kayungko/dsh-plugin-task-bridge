@@ -17,7 +17,8 @@
  *   F 方法白名单   GET /v1/spawn → 405+allow:POST；POST /v1/models → 405+allow:GET；
  *                  方法检查先于 token
  *   G 端点分发     6 端点 happy path：ops 参数形状（reportBack:false 强制、伪 caller、
- *                  cwd 解析链、wait 钳制）+ 回执字段透传（workspace/placement/…）
+ *                  cwd 解析链、wait 钳制）+ 回执字段透传（workspace/placement/…）+
+ *                  externalRef 四态（0.2.0，wire 契约 C1：传/不传/超长/非字符串）
  *   H 错误信封     ops 失败码→桥 code 映射逐项 + 未知码 + ops 抛异常 + 服务缺席/无 ops
  *                  503 + 孤儿 sessionId 透传 + 桥侧前置校验先于 ops
  *   I 策略闸       单元（注入时钟滚动窗口）+ e2e（第 N+1 次 429 policy-gated +
@@ -478,6 +479,61 @@ try {
     const m3 = mount({ config: { tokenFile: tokenPath } });
     await hit(m3.handler('/v1/spawn'), makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: 'y' }) }));
     assert.equal(m3.service().calls.spawnTask[0][1].cwd, homedir(), 'cwd 链末级应为用户主目录');
+
+    // G3b spawn externalRef（v0.2.0，wire 契约 C1，dshq-ledger-mailbox-spec Part C）：
+    // 传/不传/超长/非字符串四态。echo 型 mock：回执按 ops 实形状回显 externalRef，
+    // 验证「请求 → 桥校验/trim → ops 参数 → 回执透传」全链。合成 ref 值（脱敏红线）。
+    {
+      const mRef = mount({
+        config: { tokenFile: tokenPath },
+        service: makeMockService({
+          spawnTask: async (args) => ({
+            ok: true, sessionId: 'session-ref-child', shortId: 'ref-chil', started: true, depth: 1,
+            ...(args.externalRef !== undefined ? { externalRef: args.externalRef } : {}),
+          }),
+        }),
+      });
+      const refSvc = mRef.service();
+      // ① 传：trim 后透传 ops + 回执回显；恰好 200 字符（trim 后）放行
+      let rr = await hit(mRef.handler('/v1/spawn'), makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: 'p', externalRef: '  thread-synth:wave-smoke  ' }) }));
+      assert.equal(rr.status, 200);
+      assert.equal(refSvc.calls.spawnTask[0][0].externalRef, 'thread-synth:wave-smoke', 'ops 应收到 trim 后的 externalRef');
+      assert.equal(rr.body.externalRef, 'thread-synth:wave-smoke', '回执应回显 externalRef');
+      const ref200 = 'r'.repeat(200);
+      rr = await hit(mRef.handler('/v1/spawn'), makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: 'p', externalRef: ` ${ref200} ` }) }));
+      assert.equal(rr.status, 200, 'trim 后恰好 200 字符应放行');
+      assert.equal(refSvc.calls.spawnTask[1][0].externalRef, ref200);
+      // ② 不传：缺席 / null / 空串 / 仅空白 → ops 参数不含 externalRef 键（视为缺席）
+      for (const [index, body] of [
+        [0, { prompt: 'p' }],
+        [1, { prompt: 'p', externalRef: null }],
+        [2, { prompt: 'p', externalRef: '' }],
+        [3, { prompt: 'p', externalRef: '   \t ' }],
+      ]) {
+        rr = await hit(mRef.handler('/v1/spawn'), makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify(body) }));
+        assert.equal(rr.status, 200, `缺席形态 ${index} 应放行`);
+        const args = refSvc.calls.spawnTask.at(-1)[0];
+        assert.equal('externalRef' in args, false, `缺席形态 ${index} 不得携带 externalRef 键`);
+        assert.equal('externalRef' in rr.body, false, `缺席形态 ${index} 回执不得回显 externalRef`);
+      }
+      const callsBeforeReject = refSvc.calls.spawnTask.length;
+      // ③ 超长：trim 后 201 字符 → 400 bad-request，ops 未调
+      rr = await hit(mRef.handler('/v1/spawn'), makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: 'p', externalRef: 'x'.repeat(201) }) }));
+      assert.equal(rr.status, 400); assert.equal(rr.body.code, 'bad-request');
+      assert.match(rr.body.error, /externalRef/);
+      // 边界：trim 前 201 但 trim 后 200 → 放行（契约以 trim 后计）
+      rr = await hit(mRef.handler('/v1/spawn'), makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: 'p', externalRef: ` ${'x'.repeat(200)} ` }) }));
+      assert.equal(rr.status, 200, 'trim 后 200 应放行（超限判定以 trim 后为准）');
+      // ④ 非字符串：数字/布尔/对象/数组 → 400 bad-request，ops 未调
+      for (const invalid of [42, true, { ref: 'x' }, ['x']]) {
+        rr = await hit(mRef.handler('/v1/spawn'), makeReq({ method: 'POST', url: '/v1/spawn', headers: H, body: JSON.stringify({ prompt: 'p', externalRef: invalid }) }));
+        assert.equal(rr.status, 400, `非字符串 ${JSON.stringify(invalid)} 应 400`);
+        assert.equal(rr.body.code, 'bad-request');
+        assert.match(rr.body.error, /externalRef/);
+      }
+      // 201 超长 + 4 个非字符串 = 5 次拒绝；期间仅 trim-200 边界那次到达 ops
+      assert.equal(refSvc.calls.spawnTask.length, callsBeforeReject + 1, '被拒请求不得到达 ops（边界放行那次除外）');
+    }
 
     // G4 send：targetId 映射 + mode/reference 透传 + 回执
     r = await hit(m.handler('/v1/send'), makeReq({ method: 'POST', url: '/v1/send', headers: H, body: JSON.stringify({ sessionId: 'session-worker', text: '纠偏一下', mode: 'steer', reference: 'msg-1' }) }));
