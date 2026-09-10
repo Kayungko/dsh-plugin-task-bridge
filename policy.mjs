@@ -53,7 +53,9 @@ export class RollingWindowGate {
     const used = this.#prune(t);
     if (used >= this.max) {
       const oldest = this.admitted[0];
-      return { ok: false, retryAfterMs: Math.max(1, this.windowMs - (t - oldest) + 1) };
+      // 裁剪后所有留存项满足 t - oldest < windowMs，故差值恒 >=1；Math.max 兜底。
+      // 语义：最旧一项在 t = oldest + windowMs 时滑出窗口，距今 windowMs - (t - oldest) ms。
+      return { ok: false, retryAfterMs: Math.max(1, this.windowMs - (t - oldest)) };
     }
     this.admitted.push(t);
     return { ok: true };
