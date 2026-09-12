@@ -96,6 +96,26 @@
 
 调研文档索引（`D:\git\DHS-Tool\research\`）：task-bridge-reanchoring.md（设计权威）· codex-side-toolkit-spec.md · dshq-ledger-mailbox-spec.md · codex-selftrigger-survey.md · cross-agent-playbook 在 bridge-mcp/docs/。
 
-## 9. 许可
+## 9. 宿主要求声明标准与兼容矩阵
+
+官方统一 manifest（dsh-community-fabric）**仍是 RFC 草案**，明文「尚不能作为依赖或发布目标」；`@deepseek-ai/dsh-package-manifest` 在 0.1.5-rc.1 是占位空壳（lib 仅空 export）。因此宿主要求的唯一机器可读面 = **peerDependencies**（npm 标准，安装/市场校验读取），人类可读面 = 本节兼容矩阵（**单一事实源**，各仓 README 不重复维护）。
+
+### 声明标准（全仓强制，2026-09-12 起）
+1. 每个消费的 `@deepseek-ai/*` 宿主包设 peerDep，范围必须含预发布兼容并集段：`>=<下界> <0.2.0 || >=0.1.5-rc.1 <0.1.6`——semver 预发布规则：预发布版本只命中**同 [major,minor,patch] 元组**且带预发布的比较器，不写显式段则 rc 系列全部漏判（升级日实测踩坑：`>=0.1.2-rc.1` 不含 0.1.5-rc.1）
+2. 禁止无上界范围（给下一列车留防线）；`engines.node` 统一 `^22.19.0 || >=24`
+3. 宿主升 train 时的固定动作：漂移预检 → 各仓扩段 + 更新本矩阵（**同波次完成，不留账**）
+4. fabric 正式 manifest 发布后统一迁移（跟踪项）
+
+### 兼容矩阵（实测定档）
+| 插件 | 2.0.5 / core 0.1.2-rc.1 | 2.0.9 / core 0.1.5-rc.1 |
+|---|---|---|
+| task-coordinator v0.25.2 | ✅ 全功能 | ✅ 全功能（migrate 守卫拒绝=设计行为） |
+| task-bridge v0.2.1 | ✅ | ✅ 六探针活体 |
+| web-search-mana v0.2.2 | ✅ | ✅ verify 全过 + 实搜功能通 |
+| product-design v0.1.4 | ✅ | 🟡 预检零破坏（活体目检归 GUI 检查单） |
+| reader（施工中） | — | 🎯 原生面向 0.1.5 |
+| better-display / better-sidebar（第三方） | ✅ | ⛔ 已摘除（MessageText 删除 / 6 处破坏，等社区适配） |
+
+## 10. 许可
 
 MIT（各组件仓库同）。

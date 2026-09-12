@@ -2,6 +2,13 @@
 
 本文件记录 `dsh-plugin-task-bridge` 的版本变更。格式参照 Keep a Changelog，版本遵循语义化版本。
 
+## [0.2.1] - 2026-09-12
+
+### 变更
+
+- **宿主要求声明规范化**（五仓统一标准，权威文档 `ECOSYSTEM.md §9`）：`@deepseek-ai/dsh-host-webserver` peerDep 从无界 `>=0.1.2-rc.1` 收紧为 `>=0.1.2-rc.1 <0.2.0 || >=0.1.5-rc.1 <0.1.6`。两处修正：①semver 预发布规则下原范围实际**不含** 0.1.5-rc.1（预发布版只命中同 [major,minor,patch] 元组的比较器），市场/安装校验会误报 mismatch；②无界范围补上 `<0.2.0` 防波。运行时零变化（copy 部署不跑 npm 解析，此线是校验面+文档防线）。
+- verify-installed 版本断言同步 0.2.1。
+
 ## [0.2.0] - 2026-09-10
 
 externalRef 端到端会话对应（桥端）——与 `dsh-plugin-task-coordinator` v0.25.0 同波施工，设计权威 `research/dshq-ledger-mailbox-spec.md` Part C（wire 契约 C1 两端锁死）。解决「经桥派发的 DSH 会话无法反查是哪个外部对话/波次派的」（桥伪 caller 恒为 `task-bridge-external`）。

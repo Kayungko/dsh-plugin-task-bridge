@@ -48,7 +48,7 @@ console.log('  [OK] ① 入口 exports 形状（零 @deepseek-ai import，本位
 {
   const pkg = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8'));
   assert.equal(pkg.name, 'dsh-plugin-task-bridge');
-  assert.equal(pkg.version, '0.2.0');
+  assert.equal(pkg.version, '0.2.1');
   assert.equal(pkg.dsh?.bundle?.patch, './cordis.patch.yml', 'dsh.bundle.patch 应指向 cordis.patch.yml');
   assert.equal(pkg.type, 'module');
   const yml = readFileSync(join(here, 'cordis.patch.yml'), 'utf8');

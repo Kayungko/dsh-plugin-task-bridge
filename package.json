@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-task-bridge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Loopback HTTP control-plane bridge for DeepSeek Harness: lets an external local supervisor process (e.g. a Codex CLI/MCP driver) spawn, message, inspect and wait on DSH task sessions through six token-guarded exact routes registered on the host webserver. /v1/spawn accepts an optional externalRef (free-form external caller reference, <=200 chars after trim, wire contract C1) for cross-agent session correspondence — validated at the bridge, stored and echoed by the coordinator's spawn registry (requires coordinator 0.25.0+). Consumes the dsh-plugin-task-coordinator 0.24.0 service seam (ctx.get('taskCoordinator').ops) read-only under a shared isolate label; degrades to 503 when the coordinator is absent or disabled. Defense skeleton follows the official dsh-webhook-github adapter (constant-time token compare, single-value header check, Content-Length precheck plus streaming body cap, method whitelist, non-echoing static errors, 503 fallback).",
   "type": "module",
   "main": "index.mjs",
@@ -35,7 +35,7 @@
     "verify": "node verify-installed.mjs"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-host-webserver": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-host-webserver": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-rc.1 <0.1.6",
     "dsh-plugin-task-coordinator": ">=0.25.0"
   },
   "peerDependenciesMeta": {
