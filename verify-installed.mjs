@@ -41,7 +41,7 @@ assert.equal(typeof entry.resolveConfig, 'function', 'resolveConfig 缺失');
 assert.equal(typeof entry.defaultTokenFile, 'function', 'defaultTokenFile 缺失');
 const endpointsMod = await import('./endpoints.mjs');
 const { ENDPOINTS, BRIDGE_CALLER_SESSION_ID, WAIT_MAX_TIMEOUT_MS } = endpointsMod;
-assert.equal(ENDPOINTS.length, 6, '应为 6 端点');
+assert.equal(ENDPOINTS.length, 7, '应为 7 端点');
 console.log('  [OK] ① 入口 exports 形状（零 @deepseek-ai import，本位置可直接解析）');
 
 // ---- ② 装载契约静态断言 ----
@@ -135,7 +135,7 @@ try {
   {
     const mock = makeMockOps();
     const m = mount({ config: { tokenFile: tokenPath }, service: { config: { minSendIntervalMs: 2000 }, version: '0.24.0', ops: mock.ops } });
-    assert.equal(m.routes.size, 6, '应注册恰好 6 条路由');
+    assert.equal(m.routes.size, 7, '应注册恰好 7 条路由');
     for (const e of ENDPOINTS) {
       const route = m.routes.get(e.path);
       assert.ok(route, `路由 ${e.path} 缺失`);

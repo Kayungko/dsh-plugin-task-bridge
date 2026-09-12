@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+const BRIDGE_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
 /**
  * endpoints.mjs — 端点实现：包装 task-coordinator ops 调用面，错误映射到桥信封。
  * 纯模块：无宿主/无 @deepseek-ai import；ops 经 deps.getCoordinator() 惰性解析。
@@ -62,6 +64,7 @@ export const ENDPOINTS = Object.freeze([
   Object.freeze({ path: '/v1/wait', method: 'GET', kind: 'wait' }),
   Object.freeze({ path: '/v1/list', method: 'GET', kind: 'list' }),
   Object.freeze({ path: '/v1/models', method: 'GET', kind: 'models' }),
+  Object.freeze({ path: '/v1/capabilities', method: 'GET', kind: 'capabilities' }),
 ]);
 
 /** ops 失败码 → [桥信封 code, HTTP status]。未列出的 ops 码一律 upstream-error/500。
@@ -319,7 +322,8 @@ async function parseEndpointInput(endpoint, request, config) {
   const params = searchParams(request);
   request.resume?.();
   if (endpoint.kind === 'progress') {
-    return { sessionId: requireString(params.get('sessionId'), 'sessionId (query)') };
+    return { sessionId: requireString(params.get('sessionId'), 'sessionId (query)'),
+      cursor: optionalString(params.get('cursor'), 'cursor'), messageId: optionalString(params.get('messageId'), 'messageId') };
   }
   if (endpoint.kind === 'wait') {
     const ids = [...params.getAll('sessionId')];
@@ -366,7 +370,7 @@ async function parseEndpointInput(endpoint, request, config) {
       limit,
     };
   }
-  if (endpoint.kind === 'models') return {};
+  if (endpoint.kind === 'models' || endpoint.kind === 'capabilities') return {};
   throw new Error(`unreachable: GET endpoint kind ${endpoint.kind}`);
 }
 
@@ -431,6 +435,17 @@ async function callOps(deps, method, args) {
 /** 执行端点业务（策略闸 + ops 调用）。返回 {status, payload, extraHeaders?}。 */
 async function executeEndpoint(endpoint, deps, input, response) {
   switch (endpoint.kind) {
+    case 'capabilities': {
+      const service = deps.getCoordinator();
+      const enabled = !!service?.ops;
+      return { status: 200, payload: { ok: true, protocolVersion: 1, bridgeVersion: BRIDGE_VERSION,
+        coordinatorVersion: typeof service?.version === 'string' ? service.version : null, coordinatorEnabled: enabled,
+        capabilities: enabled ? { ...(service.capabilities ?? {}) } : {},
+        endpoints: ENDPOINTS.map(e => e.path), limits: { waitMaxMs: WAIT_MAX_TIMEOUT_MS,
+          spawnMaxPerWindow: deps.config.spawnMaxPerWindow, spawnWindowMs: deps.config.spawnWindowMs },
+        reportBack: false, cwdDefault: 'bridge-config-or-user-home',
+      } };
+    }
     case 'spawn': {
       // 策略闸（固定契约⑦）：先于 ops 调用；被闸的请求不消耗 ops，也不到达 coordinator
       const admission = deps.gate.tryAcquire();
@@ -474,7 +489,11 @@ async function executeEndpoint(endpoint, deps, input, response) {
       }, caller]);
     }
     case 'progress': {
-      return callOps(deps, 'progress', [input.sessionId, makeCaller(undefined, deps.config)]);
+      if ((input.cursor !== undefined || input.messageId !== undefined) && deps.getCoordinator()?.capabilities?.progressCursor !== true) {
+        return { status: 503, payload: failEnvelope(ENVELOPE_CODES.UPSTREAM_ERROR, 'coordinator does not support incremental progress', { upstreamCode: 'capability-unavailable' }) };
+      }
+      return callOps(deps, 'progress', [input.sessionId, makeCaller(undefined, deps.config), undefined,
+        { cursor: input.cursor, messageId: input.messageId }]);
     }
     case 'wait': {
       // 断连即中止（蓝图 §3.2 项2）：res 'close' 且响应未写完 → AbortController.abort()

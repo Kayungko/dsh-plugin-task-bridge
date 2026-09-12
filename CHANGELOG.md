@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased] — Codex 协作增量
+
+新增同等鉴权的 /v1/capabilities；progress 透传 cursor/messageId，旧 coordinator 不支持时明确 capability-unavailable；原六业务端点和八种错误码不变。
+
+仅源码变更，不表示已部署、重启或完成实机验收。
+
 本文件记录 `dsh-plugin-task-bridge` 的版本变更。格式参照 Keep a Changelog，版本遵循语义化版本。
 
 ## [0.2.1] - 2026-09-12

@@ -4,13 +4,15 @@
 >
 > 版本 **0.2.0** · 许可 MIT · 宿主 DSH Desktop（cordis 插件架构）
 
-外部驱动方没有 DSH 的进程内 agent 上下文，无法直接调用 `task_*` 工具。本桥在宿主 webserver 上注册 6 条 **exact 路由**，把 HTTP 请求翻译成对 `dsh-plugin-task-coordinator` **服务缝**（`taskCoordinator` 服务的 `ops` 实例）的调用，从而以「拉非推」（long-poll `wait` + 轮询 `progress`）模型驱动 DSH 任务。
+外部驱动方没有 DSH 的进程内 agent 上下文，无法直接调用 `task_*` 工具。本桥在宿主 webserver 上注册六个业务端点和一个只读 capabilities 端点的 **exact 路由**，把 HTTP 请求翻译成对 `dsh-plugin-task-coordinator` **服务缝**（`taskCoordinator` 服务的 `ops` 实例）的调用，从而以「拉非推」（long-poll `wait` + 轮询 `progress`）模型驱动 DSH 任务。
 
 设计基线与取证见 `research/task-bridge-reanchoring.md`（本仓库上级 `D:\git\DHS-Tool\research`）；服务缝消费契约见 `dsh-plugin-task-coordinator` 的 `docs/PROTOCOL.md §17`。
 
 **生态级入口（五组件全景/安装顺序/五条通道/运维手册/双层总控模板）：[ECOSYSTEM.md](./ECOSYSTEM.md)** —— 本 README 只覆盖桥插件自身。
 
 ---
+
+当前源码新增 `GET /v1/capabilities`（同等鉴权）与 progress 的可选 `cursor/messageId`。运行中 coordinator 不支持增量时明确拒绝，不静默忽略。完整接入说明见 [Codex 增量契约](../bridge-mcp/docs/codex-integration.md)。
 
 ## 目录
 

@@ -225,7 +225,7 @@ try {
     const tokenPath = join(tmp, 'a-token.txt');
     writeFileSync(tokenPath, TOKEN_A, 'utf8');
     const m = mount({ config: { tokenFile: tokenPath } });
-    assert.equal(m.routes.size, 6, '应注册恰好 6 条路由');
+    assert.equal(m.routes.size, 7, '应注册恰好 7 条路由');
     for (const e of ENDPOINTS) {
       assert.ok(m.routes.has(e.path), `路由 ${e.path} 缺失`);
       assert.equal(m.routes.get(e.path).kind, 'exact', `${e.path} 应为 exact`);
@@ -237,7 +237,7 @@ try {
     assert.ok(m.routes.has('/v1/extra'));
     d();
     assert.ok(!m.routes.has('/v1/extra'), 'disposer 应移除路由');
-    assert.equal(m.routes.size, 6);
+    assert.equal(m.routes.size, 7);
     // apply 缺 webServer 抛错
     assert.throws(() => apply({ logger: { info() {}, warn() {} }, effect() {} }, {}), /webServer/);
     // resolveConfig 默认
@@ -787,7 +787,36 @@ try {
     pass('K 信封与头');
   }
 
-  console.log(`\n[OK] smoke 全部通过（${sectionCount} 节：A-K）`);
+  // L runtime capabilities and optional progress contract negotiation.
+  {
+    const tokenPath = join(tmp, 'l-token.txt');
+    writeFileSync(tokenPath, TOKEN_A, 'utf8');
+    const service = makeMockService();
+    service.capabilities = { progressCursor: true, externalRef: true };
+    const m = mount({ config: { tokenFile: tokenPath }, service });
+    const capRequest = () => makeReq({ url: '/v1/capabilities', headers: authHeaders(TOKEN_A) });
+    const caps = await hit(m.handler('/v1/capabilities'), capRequest());
+    assert.equal(caps.body.coordinatorEnabled, true);
+    assert.equal(caps.body.coordinatorVersion, service.version);
+    assert.equal(caps.body.capabilities.progressCursor, true);
+    assert.equal(caps.body.limits.waitMaxMs, 50000);
+    const progressReq = () => makeReq({ url: '/v1/progress?sessionId=s&cursor=opaque&messageId=m', headers: authHeaders(TOKEN_A) });
+    await hit(m.handler('/v1/progress'), progressReq());
+    assert.deepEqual(service.calls.progress.at(-1)[3], { cursor: 'opaque', messageId: 'm' });
+    delete service.capabilities;
+    const old = await hit(m.handler('/v1/progress'), progressReq());
+    assert.equal(old.status, 503);
+    assert.equal(old.body.upstreamCode, 'capability-unavailable');
+    const absent = mount({ config: { tokenFile: tokenPath }, service: null });
+    const noService = await hit(absent.handler('/v1/capabilities'), capRequest());
+    assert.equal(noService.body.coordinatorEnabled, false);
+    assert.deepEqual(noService.body.capabilities, {});
+    const denied = await hit(m.handler('/v1/capabilities'), makeReq({ url: '/v1/capabilities' }));
+    assert.equal(denied.status, 401);
+    pass('L 运行能力与增量协议');
+  }
+
+  console.log(`\n[OK] smoke 全部通过（${sectionCount} 节：A-L）`);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }
