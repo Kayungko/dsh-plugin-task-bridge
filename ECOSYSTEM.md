@@ -9,13 +9,13 @@
 ┌─ Codex 侧（L1，一级总控）─────────────────────────────┐
 │  Codex 会话 (thread)                                   │
 │   ├─ dsh-orchestration skill（纪律大脑：工作流/授权阶梯）│
-│   ├─ dsh_task_* MCP 工具（6 个，推理中结构化调用）       │
-│   ├─ dshq CLI（十命令：台账/别名/信箱/派发/纠偏/等待）   │
+│   ├─ dsh_task_* MCP 工具（7 个，含 capabilities 能力查询）       │
+│   ├─ dshq CLI（命令面：派发/纠偏/等待/台账/别名/信箱/静默监控/workflow/能力查询）   │
 │   └─ heartbeat 定时巡检（原生 automation，分钟级自唤醒）  │
 └──────────────┬────────────────────────────────────────┘
                │ HTTP（回环 127.0.0.1:43120/v1/*，X-Task-Bridge-Token）
 ┌──────────────▼─ DSH 侧 ───────────────────────────────┐
-│  dsh-plugin-task-bridge（六端点，token 唯一防线）        │
+│  dsh-plugin-task-bridge（七端点，token 唯一防线）        │
 │   └─ 服务缝 → dsh-plugin-task-coordinator ops 实例      │
 │        └─ task_* 工具面 → L2 总控会话 → 子任务舰队       │
 │           （工作区归属五级链 / 编排视图 / GUI 设置页）    │
@@ -29,9 +29,9 @@
 
 | 组件 | 仓库/位置 | 版本基线 | 角色 | 文档入口 |
 |---|---|---|---|---|
-| task-coordinator（含服务缝） | Kayungko/dsh-plugin-task-coordinator（`plugin/`） | ≥ v0.25.0 | DSH 侧编排核心：11 工具 + provide `{config,version,ops}` 缝 + externalRef 全链 | 其 README / `docs/PROTOCOL.md §17`（缝契约） |
-| task-bridge | Kayungko/dsh-plugin-task-bridge（`bridge/`） | ≥ v0.2.0 | 回环 HTTP 控制面：六端点包 ops，安全全责 | `bridge/README.md`（安全模型必读） |
-| bridge-mcp | Kayungko/dsh-task-bridge-mcp（`bridge-mcp/`） | ≥ v0.3.0 | Codex 侧 MCP wrapper（6 工具）+ dshq CLI + 台账/别名/信箱 | `bridge-mcp/README.md`、`docs/cross-agent-playbook.md` |
+| task-coordinator（含服务缝） | Kayungko/dsh-plugin-task-coordinator（`plugin/`） | ≥ v0.26.0 | DSH 侧编排核心：11 工具 + provide `{config,version,ops}` 缝 + externalRef 全链 | 其 README / `docs/PROTOCOL.md §17`（缝契约） |
+| task-bridge | Kayungko/dsh-plugin-task-bridge（`bridge/`） | ≥ v0.3.0 | 回环 HTTP 控制面：七端点包 ops（含 /v1/capabilities；增量 progress 游标需 coordinator ≥0.26.0），安全全责 | `bridge/README.md`（安全模型必读） |
+| bridge-mcp | Kayungko/dsh-task-bridge-mcp（`bridge-mcp/`） | ≥ v0.4.0 | Codex 侧 MCP wrapper（7 工具）+ dshq CLI（含静默监控/workflow v1 本地控制面）+ 台账/别名/信箱 | `bridge-mcp/README.md`、`docs/cross-agent-playbook.md` |
 | dsh-orchestration skill | `C:\Users\admin\.agents\skills\dsh-orchestration\`（共享目录，两端可见） | 随 bridge-mcp | Codex 侧操作纪律：四工作流/拉模型/信件授权阶梯 | `SKILL.md` |
 | 文件信箱 + heartbeat | `C:\Users\admin\.dshq\outbox\` + Codex 原生 automation | — | DSH→Codex 确定性递送 + 无人巡检自唤醒 | playbook §B/§E |
 
@@ -52,13 +52,14 @@
 1. **task-coordinator ≥0.25.0**：`plugin/install.ps1` → 重启 DSH（服务缝是宿主面代码）
 2. **task-bridge ≥0.2.0**：`bridge/install.ps1`（首装自动生成 64hex token 于 `~/.dsh/task-bridge-token`，已存在不覆盖）→ 重启 DSH
 3. **bridge-mcp**：clone 即用（零依赖）；MCP 挂载＝`~/.codex/config.toml` 加 `[mcp_servers.dsh-task-bridge]`（command=node + `src/server.mjs` 绝对路径，**零凭据入配置**）
-4. **skill**：拷 `bridge-mcp/skills/dsh-orchestration/` 到 `C:\Users\admin\.agents\skills\`
+4. **skill**：`node scripts/package-skills.mjs --out <空暂存目录>` 生成自带运行代码的技能包，核对 bundle-manifest.json 后部署到 `C:\Users\admin\.agents\skills\`——**禁止直拷仓库目录**（相对链接会断且缺 runtime，P2-2）
 5. **验证**：`dshq version`（桥可达+token 来源）→ `dshq status` → 探针 spawn/watch/reply 一轮
 6. （可选）**heartbeat**：照 playbook §E2 模板在目标 thread 创建，5 分钟档首验后转 30 分钟正式档
 
 ## 5. 安全模型速览（细节在 bridge/README「安全模型（必读）」）
 
 - **token 是唯一防线**（exact 路由零宿主鉴权，探针实证）：恒时比较、文件权限即边界、覆写即热轮换（无需重启）
+- /v1/capabilities（v0.3.0）**同受 token 守卫**（与六业务端点完全同链五闸，评审已验证）；暴露面=版本/端点清单/限额/能力旗标，仅 token 持有者可见——客户端协商所需，评审判定可接受
 - 仅回环 + 非回环 403 + body 256KB 限长 + 自定义头防 CSRF
 - 策略闸：60s/10 次 spawn 滚动窗口（429 policy-gated + retryAfterMs）
 - 桥派发**不过 GUI 确认卡**（凭证 callerSessionId 绑定对桥结构性不可用）——纪律替代闸门：串行派发 + ref 可审计 + 信件四级授权阶梯（playbook §E4）
@@ -70,7 +71,7 @@
 |---|---|---|
 | token 轮换 | 覆写 `~/.dsh/task-bridge-token`（64hex） | **即时**（两端惰性重读） |
 | 桥/coordinator 升版 | 各自 install.ps1 → **重启 DSH** | 重启后 |
-| CLI/MCP/skill 升级 | git pull bridge-mcp（skill 拷共享目录） | Codex 下次调用即新 |
+| CLI/MCP/skill 升级 | git pull bridge-mcp（skill 用 package-skills.mjs 产物重新部署） | Codex 下次调用即新 |
 | 队列深度上限 | DSH GUI 设置→任务编排（0-50，活读） | **免重启** |
 | 桥默认工作区 | profile patch `task-bridge-runtime.config.defaultCwd` | 重启后 |
 | 故障排查 | playbook §D 故障速查表（401/refused/429/空 recent/截断/没信） | — |
