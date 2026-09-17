@@ -115,6 +115,9 @@
 | product-design v0.1.4 | ✅ | 🟡 预检零破坏（活体目检归 GUI 检查单） |
 | reader（施工中） | — | 🎯 原生面向 0.1.5 |
 | better-display / better-sidebar（第三方） | ✅ | ⛔ 已摘除（MessageText 删除 / 6 处破坏，等社区适配） |
+| progress-target v2.0.1（第三方） | — | 🟡 已装（dataDir 绝对路径覆盖），装载目检待用户 |
+
+> **2.0.10 / core 0.1.5-rc.2 列（0918 活体）**：task-coordinator v0.26.0 ✅（136 测试+桥探针）· task-bridge v0.3.0 ✅（smoke+活体）· web-search-mana v0.2.2 / product-design v0.1.4 / reader v0.2.1 🟡（rc.2 实质 27 文件零命中其消费面，源码级判定，活体复验随下次回归）。rc.2 实质面=消息反馈 UI/deliverables 展示/CodeFileIcon 新增/chat 一处 CSS。
 
 ## 10. 许可
 

@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased] — Codex 协作增量
+## [0.3.0] - 2026-09-18
+
+### 收编正式化（0918 总控）
+
+- 正式化 09-12 Codex 协作波次提交 47d8982（新增同等鉴权 /v1/capabilities 运行时能力端点 + progress 增量 cursor/messageId 透传）——当时随 plugin 线部署在产，现收编补版本。收编验证：smoke 全绿 + 活体探针 models/list 200（2.0.10 宿主）。
+
+### Codex 协作增量（09-12 波次原文）
 
 新增同等鉴权的 /v1/capabilities；progress 透传 cursor/messageId，旧 coordinator 不支持时明确 capability-unavailable；原六业务端点和八种错误码不变。
 
