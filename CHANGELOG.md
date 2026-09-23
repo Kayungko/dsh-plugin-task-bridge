@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1] - 2026-09-23
+
+### DEPRECATED：合并进 dsh-plugin-task-coordinator 0.27.0
+
+- 本包全部挂载面（七条 /v1/* exact 路由、X-Task-Bridge-Token 鉴权、token 文件默认路径、body 上限与 spawn 策略闸）已**硬切合并**进 dsh-plugin-task-coordinator 0.27.0，wire 契约冻结不改；合并后桥由宿主内实验开关管理（设置 → 任务编排 → 外部任务桥，热挂载/卸载）。本包标 DEPRECATED，保留一个发布周期供对照与回滚，随后删除。
+- 本版仅文档与版本号变更（README DEPRECATED banner + 本条），代码零改动。消费方（dsh-task-bridge-mcp 等）无需任何修改——它们只认 43120 的 wire 契约，合并前后逐字节一致（实测：合并后 bridge-mcp 零改动存活、无需重启）。
+- 发版：git tag v0.3.1。
+
 ## [0.3.0] - 2026-09-18
 
 ### 收编正式化（0918 总控）
