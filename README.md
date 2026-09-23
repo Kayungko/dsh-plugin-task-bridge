@@ -1,5 +1,11 @@
 # dsh-plugin-task-bridge
 
+> ⚠️ **DEPRECATED（0.27.0 起）**：本独立包已硬切合并进 `dsh-plugin-task-coordinator`
+> （四个 `bridge-*.mjs` 模块 + 「任务编排」设置段实验开关 `bridgeEnabled`）。
+> 设计与冻结 wire 契约见 `research/bridge-merge-into-coordinator-design.md`。
+> 本目录保留一个迁移周期仅供溯源与 smoke 参考，**不要再安装或修改**；
+> 新部署请使用 coordinator ≥0.27.0 并打开实验开关。
+
 > 本地回环 HTTP 控制面桥 —— 让外部本机进程（如 Codex 总控 / 其 MCP stdio wrapper）驱动 DeepSeek Harness（DSH）的任务会话。
 >
 > 版本 **0.2.0** · 许可 MIT · 宿主 DSH Desktop（cordis 插件架构）
